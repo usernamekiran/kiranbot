@@ -3,7 +3,6 @@ import re
 import os
 import requests
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
-import html
 
 # target site
 site = pywikibot.Site('en', 'wikipedia')
@@ -179,20 +178,21 @@ def find_and_replace_amp_links(text, page):
 
     return updated_text, changes_made
 
-def process_page(page, edit_counter):
+def process_page(page):
     ## process page, find AMP links, and update if necessary
+    global edit_counter
     original_text = page.text
     updated_text, changes_made = find_and_replace_amp_links(original_text, page)
 
     if changes_made:
+        #page.text = updated_text
+        #page.save(summary="removed AMP tracking from URLs [[Wikipedia:Bots/Requests for approval/KiranBOT 12|BRFA 1.1]]") 
         print(f"changes made to page: {page.title()}")
     else:
         print(f"no changes made to page: {page.title()}")
     
     # only save changes if any AMP links were cleaned
-    if changes_made:
-        # page.text = updated_text
-        # page.save(summary="removed AMP tracking from URLs [[Wikipedia:Bots/Requests for approval/KiranBOT 12|BRFA 1.1]]") 
+    if changes_made and edit_counter < max_edits:
         edit_counter += 1
         with open(list_file, "a", encoding="utf-8") as f:
             f.write(f"{page.title()}\n")
@@ -202,8 +202,6 @@ def process_page(page, edit_counter):
         print(f"updated page: {page.title()}")
     else:
         print(f"no changes made to page: {page.title()}")
-
-    return edit_counter
 
 def main():
     global edit_counter
@@ -223,10 +221,15 @@ def main():
 
     # iterate over each article title and process the corresponding page
     for title in article_titles:
+        if edit_counter >= max_edits:
+            print(f"Reached the maximum limit of {max_edits} edits. Exiting.")
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"* Reached the maximum limit of {max_edits} edits. Exiting.\n")
+            break
         try:
-            page = pywikibot.Page(site, title)  # fetch the page by title
+            page = pywikibot.Page(site, title)  # Fetch the page by title
             print(f"processing page: {page.title()}")
-            edit_counter = process_page(page, edit_counter)  # pass both page and edit_counter
+            process_page(page)
         except Exception as e:
             print(f"error processing page {title}: {e}")
             with open(log_file, 'a', encoding='utf-8') as f:
