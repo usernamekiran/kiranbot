@@ -5,6 +5,8 @@ import requests
 from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 #import html
 
+# successfully fixes all the amp links from https://en.wikipedia.org/w/index.php?title=User:KiranBOT/sandbox/amp&oldid=1254458707
+
 # target site
 site = pywikibot.Site('en', 'wikipedia')
 
@@ -17,26 +19,31 @@ list_file = os.path.join(os.path.expanduser("~"), "enwiki", "amp", "logs", "amp_
 skip_file = os.path.join(os.path.expanduser("~"), "enwiki", "amp", "logs", "amp_skip.txt")
 
 # define AMP keywords to detect AMP links in URLs
-AMP_KEYWORDS = ["/amp", "amp/", ".amp", "amp.", "?amp", "amp?", "=amp", 
-                "amp=", "&amp", "amp&", "%amp", "amp%", "_amp", "amp_"]
+AMP_KEYWORDS = [
+    "/amp", "amp/", ".amp", "amp.", "?amp", "amp?", "=amp", 
+    "amp=", "&amp", "amp&", "%amp", "amp%", "_amp", "amp_", 
+    "-amp", "amp-", 
+    "/amp-", "-amp/",  
+    "amphtml", "_amphtml", "-amphtml", "/amphtml", "amphtml/", "?amphtml", 
+    "amphtml=", "amphtml?"
+]
 
 def is_amp_url(url):
     ## check if the URL contains AMP in the subdomain, path, or query
     parsed_url = urlparse(url)
 
-    # check for AMP in the subdomain
-    if parsed_url.netloc.startswith('amp.'):
+    # 'amp.' in the subdomain
+    if 'amp.' in parsed_url.netloc:
         return True
-    
-    # check AMP keywords in the path (not in the domain)
-    for keyword in AMP_KEYWORDS:
-        if keyword in parsed_url.path:
-            return True
-    
-    # check AMP keywords in query parameters
+
+    # amp keywords in the path
+    if any(keyword in parsed_url.path for keyword in AMP_KEYWORDS):
+        return True
+
+    # check amp related keywords in query parameters
     query_params = dict(parse_qsl(parsed_url.query))
-    for param in query_params:
-        if 'amp' in param:
+    for param, value in query_params.items():
+        if 'amp' in param.lower() or value == 'amp':
             return True
 
     return False
@@ -48,36 +55,42 @@ def clean_amp_url(url):
     path = parsed_url.path
     query_params = dict(parse_qsl(parsed_url.query))
 
-    # handle subdomain-based AMP (e.g., amp.example.com → www.example.com)
-    if domain.startswith('amp.'):
-        cleaned_domain = domain.replace('amp.', 'www.', 1)  # Replace 'amp.' with 'www.'
+    # handle subdomain-based AMP by removing 'amp.' if its at the start or anywhere within the subdomain
+    if domain.startswith('amp.') or '.amp.' in domain:
+        # replace any occurrences of 'amp.' in the domain
+        cleaned_domain = domain.replace('amp.', '', 1)
+        # remove leading '.' if it exists after cleanup
+        cleaned_domain = cleaned_domain.lstrip('.')
         parsed_url = parsed_url._replace(netloc=cleaned_domain)
         print(f"Subdomain cleaned: {cleaned_domain}")
 
-    # handle path-based AMP (e.g., example.com/amp/article → example.com/article)
-    if '/amp/' in path:
-        cleaned_path = path.replace('/amp/', '/')
-        parsed_url = parsed_url._replace(path=cleaned_path)
-        print(f"Path cleaned from /amp/: {cleaned_path}")
+    # handle specific path patterns to remove '/amp/', '-amp/', etc
+    path_patterns = [
+        '/amp/', '-amp/', '/amp-', '/amphtml/', '-amphtml'
+    ]
+    for pattern in path_patterns:
+        if pattern in path:
+            path = path.replace(pattern, '/')
+            print(f"Path cleaned from '{pattern}': {path}")
 
-    # handle suffix-based AMP (e.g., example.com/article-amp.html → example.com/article.html)
+    # handle suffix-based AMP patterns at the end of the URL
     if path.endswith('-amp.html'):
-        cleaned_path = path.replace('-amp.html', '.html')
-        parsed_url = parsed_url._replace(path=cleaned_path)
-        print(f"Suffix cleaned from -amp.html: {cleaned_path}")
+        path = path.replace('-amp.html', '.html')
+        print(f"Suffix cleaned from -amp.html: {path}")
     elif path.endswith('-amp'):
-        cleaned_path = path.replace('-amp', '')
-        parsed_url = parsed_url._replace(path=cleaned_path)
-        print(f"Suffix cleaned from -amp: {cleaned_path}")
-    
-    # handle specific "Economic Times" AMP pattern (e.g., amp_articleshow → articleshow)
-    if 'amp_articleshow' in path:
-        cleaned_path = path.replace('amp_articleshow', 'articleshow')
-        parsed_url = parsed_url._replace(path=cleaned_path)
-        print(f"Specific pattern 'amp_articleshow' cleaned: {cleaned_path}")
+        path = path.replace('-amp', '')
+        print(f"Suffix cleaned from -amp: {path}")
 
-    # remove AMP-related query parameters (e.g., amp=1, amp=true)
-    cleaned_query = {k: v for k, v in query_params.items() if 'amp' not in k.lower()}
+    # specific handling for "amp_articleshow" pattern
+    if 'amp_articleshow' in path:
+        path = path.replace('amp_articleshow', 'articleshow')
+        print(f"Specific pattern 'amp_articleshow' cleaned: {path}")
+
+    # rpdate the path after all replacements
+    parsed_url = parsed_url._replace(path=path)
+
+    # remove AMP-related query parameters or values
+    cleaned_query = {k: v for k, v in query_params.items() if 'amp' not in k.lower() and v.lower() != 'amp'}
     parsed_url = parsed_url._replace(query=urlencode(cleaned_query))
 
     # rebuild the cleaned URL
@@ -108,7 +121,7 @@ def clean_amp_url_with_test(url, title):
         return url
 
 def find_and_replace_amp_links_in_refs(text, title):
-    """Find and replace AMP links inside <ref>...</ref> tags."""
+    ## find and replace AMP links inside ref tags
     ref_pattern = re.compile(r'<ref[^>]*>(.*?)</ref>', re.DOTALL)
     matches = ref_pattern.findall(text)
 
@@ -124,10 +137,10 @@ def find_and_replace_amp_links_in_refs(text, title):
         for url in urls_in_ref:
             if is_amp_url(url):
                 print(f"AMP URL detected: {url}")
-                cleaned_url = clean_amp_url(url)  # Clean the AMP URL
+                cleaned_url = clean_amp_url(url)
 
                 if cleaned_url != url:
-                    # Replace the old AMP URL with the cleaned URL
+                    # replace the old AMP URL with the cleaned URL
                     updated_ref = ref.replace(url, cleaned_url)
                     updated_text = updated_text.replace(ref, updated_ref)
                     print(f"Replaced AMP URL with Cleaned URL: {cleaned_url}")
@@ -142,7 +155,7 @@ def find_and_replace_amp_links_in_refs(text, title):
     return updated_text, changes_made
 
 def process_templates(page, text):
-    """Process citation templates like {{cite web}}, {{cite news}}, etc., and clean AMP links."""
+    ## process citation templates {{cite web}}, and {{cite news}}, and clean AMP links
     changes_made = False
     templates = page.templatesWithParams()
 
@@ -173,7 +186,7 @@ def process_templates(page, text):
 """
 
 def find_and_replace_amp_links(text, page):
-    text = html.unescape(text)  # Decode any HTML entities
+    text = html.unescape(text)  # decode any HTML entities
     
     updated_text, ref_changes_made = find_and_replace_amp_links_in_refs(text, page.title())
     updated_text, template_changes_made = process_templates(page, updated_text)
@@ -196,10 +209,10 @@ def find_and_replace_amp_links(text, page):
 
     return updated_text, changes_made
 
-def process_page(page, edit_counter):
-#def process_page(page):
+#def process_page(page, edit_counter):
+def process_page(page):
     ## process page, find AMP links, and update if necessary
-    #global edit_counter
+    global edit_counter
     original_text = page.text
     updated_text, changes_made = find_and_replace_amp_links(original_text, page)
 
@@ -211,7 +224,7 @@ def process_page(page, edit_counter):
     # only save changes if any AMP links were cleaned
     if changes_made:
         page.text = updated_text
-        #page.save(summary="removed AMP tracking from URLs") 
+        page.save(summary="removed AMP tracking from URLs") 
         edit_counter += 1
         with open(list_file, "a", encoding="utf-8") as f:
             f.write(f"{page.title()}\n")
@@ -223,7 +236,7 @@ def process_page(page, edit_counter):
         print(f"no changes made to page: {page.title()}")
 
     return edit_counter
-
+"""
 def main():
     global edit_counter
 
@@ -258,7 +271,7 @@ def main():
 
 if __name__ == "__main__":
     main()
-
+"""
 """
 def main():
     global edit_counter
@@ -283,7 +296,7 @@ def main():
 if __name__ == "__main__":
     main()
 """
-"""
+
 def main():
     global edit_counter
     # single page
@@ -303,4 +316,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-"""
+
