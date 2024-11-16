@@ -23,6 +23,15 @@ def check_for_run():
         with open(log_file, "a", encoding="utf-8") as f:
             f.write('* "* RUN" not present on `User:KiranBOT/shutoff/AMP`, exiting.')
 
+def check_for_nobots(page):
+    # Check if the page contains the {{nobots}} template
+    if '{{nobots}}' in page.text.lower():  # Case insensitive check
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(f"* Skipped (contains {{nobots}}): {page.title()}\n")
+        print(f"Skipped (contains {{nobots}}): {page.title()}")
+        return True
+    return False
+
 # define AMP keywords to detect AMP links in URLs
 AMP_KEYWORDS = [
     "/amp", "amp/", ".amp", "amp.", "?amp", "amp?", "=amp", 
@@ -179,7 +188,11 @@ def find_and_replace_amp_links(text, page):
 def process_page(page, edit_counter):
 #def process_page(page):
     #global edit_counter
-    check_for_run()
+    # check for the {{nobots}} template and skip if present
+    if check_for_nobots(page):
+        return edit_counter  # skip the page and don't make any edits
+    check_for_run()  # check the control page
+
     original_text = page.text
     updated_text, changes_made = find_and_replace_amp_links(original_text, page)
 
