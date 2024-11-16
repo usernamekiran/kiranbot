@@ -17,9 +17,9 @@ sink_file = os.path.expanduser("~/enwiki/amp/logs/amp_sink.txt")  # new file to 
 
 def check_for_run():
     # Re-fetch the control page each time to get the latest content
-    amp_control_page = pywikibot.Page(site, "User:KiranBOT/shutoff/AMP")
-    amp_control_page_text = teabot_control_page.text.lower()  # Fetch page content and convert to lowercase for case-insensitive search
-    if "* run" not in amp_control_page_text:
+    control_page = pywikibot.Page(site, "User:KiranBOT/shutoff/AMP")
+    control_page_text = control_page.text.lower()  # Fetch page content and convert to lowercase for case-insensitive search
+    if "* run" not in control_page_text:
         with open(log_file, "a", encoding="utf-8") as f:
             f.write('* "* RUN" not present on `User:KiranBOT/shutoff/AMP`, exiting.')
 
@@ -111,7 +111,18 @@ def clean_amp_url_with_test(url, title):
             f.write(f"Article: {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status (both failed): Original={original_status}, Cleaned={cleaned_status}\n\n")
         return cleaned_url
 
-    # case 3: cleaned URL works, proceed with replacement
+    # case 3: Handle redirects where the cleaned AMP URL leads to a different final destination
+    # if the cleaned URL results in a redirect (301 or 302), and the final URL after redirection differs from the original AMP URL's final destination, skip processing and log the event
+    # this ensures that we don't unintentionally modify the URL to a different destination
+    if cleaned_status in [301, 302] and cleaned_final_url != original_final_url:
+    #if status_code in [301, 302] and final_url != cleaned_url:
+        with open(skip_file, "a", encoding="utf-8") as f:
+            f.write(f"Skipped (Redirect): {title}: {url} -> {final_url} (Status: {status_code})\n")
+        with open(sink_file, "a", encoding="utf-8") as f:
+            f.write(f"Skipped (Redirect): {title}: {url} -> {final_url} (Status: {status_code})\n")
+        return url
+
+    # case 4: cleaned URL works, proceed with replacement
     with open(list_file, "a", encoding="utf-8") as f:
         f.write(f"Article: {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status: {cleaned_status}\n\n")
     return cleaned_url
