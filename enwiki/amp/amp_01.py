@@ -108,16 +108,16 @@ def clean_amp_url_with_test(url, title):
     original_final_url, original_status = test_url(url)
     cleaned_final_url, cleaned_status = test_url(cleaned_url)
 
-    # case 1: original URL works, but cleaned URL fails
+    # case 1: original url works, but cleaned url fails
     if original_status == 200 and cleaned_status != 200:
         with open(skip_file, "a", encoding="utf-8") as f:
-            f.write(f"* skipped (original works, cleaned fails): {title}\nOriginal URL: {url}\nCleaned URL: {cleaned_url}\n(Status: {cleaned_status})\n\n")
+            f.write(f"* {title}\nSkipped (Original works, cleaned fails):\nOriginal URL: {url}\nCleaned URL: {cleaned_url}\n(Status: {cleaned_status})\n\n")
         return url  # return original AMP URL to skip this change
 
     # case 2: both original and cleaned URLs are errors (e.g., 404), proceed with cleaning
     if original_status != 200 and cleaned_status != 200:
         with open(list_file, "a", encoding="utf-8") as f:
-            f.write(f"Article: {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status (both failed): Original={original_status}, Cleaned={cleaned_status}\n\n")
+            f.write(f"* {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status (both failed): Original={original_status}, Cleaned={cleaned_status}\n\n")
         return cleaned_url
 
     # case 3: Handle redirects where the cleaned AMP URL leads to a different final destination
@@ -126,14 +126,14 @@ def clean_amp_url_with_test(url, title):
     if cleaned_status in [301, 302] and cleaned_final_url != original_final_url:
     #if status_code in [301, 302] and final_url != cleaned_url:
         with open(skip_file, "a", encoding="utf-8") as f:
-            f.write(f"Skipped (Redirect): {title}: {url} -> {final_url} (Status: {status_code})\n")
+            f.write(f"* {title}: Skipped (Redirect):\n url: {url}\nfinal url: {final_url}\n(Status: {status_code})\n\n")
         with open(sink_file, "a", encoding="utf-8") as f:
-            f.write(f"Skipped (Redirect): {title}: {url} -> {final_url} (Status: {status_code})\n")
+            f.write(f"* {title}: Skipped (Redirect):\n url: {url}\nfinal url: {final_url}\n(Status: {status_code})\n\n")
         return url
 
     # case 4: cleaned URL works, proceed with replacement
     with open(list_file, "a", encoding="utf-8") as f:
-        f.write(f"Article: {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status: {cleaned_status}\n\n")
+        f.write(f"* {title}\nOld URL: {url}\nCleaned URL: {cleaned_url}\nResponse Status: {cleaned_status}\n\n")
     return cleaned_url
 
 def find_and_replace_amp_links_in_refs(text, title):
@@ -199,14 +199,14 @@ def process_page(page, edit_counter):
     if changes_made:
         print(f"Changes made to page: {page.title()}")
         page.text = updated_text
-        page.save(summary="removed AMP tracking from URLs [[Wikipedia:Bots/Requests for approval/KiranBOT 12|BRFA 12.1]]", minor=True, botflag=True)
+        page.save(summary="removed AMP tracking from URLs [[Wikipedia:Bots/Requests for approval/KiranBOT 12|BRFA 12.1]]", minor=True, botflag=True) 
         edit_counter += 1
         time.sleep(120)
         with open(list_file, "a", encoding="utf-8") as f:
             f.write(f"{page.title()}\n")
-        with open(change_file, "a", encoding="utf-8") as f:
-            f.write(f"* updated text for {page.title()}:\n{updated_text}\n")
-            f.write("="*40 + "\n")
+        #with open(change_file, "a", encoding="utf-8") as f:
+            #f.write(f"* updated text for {page.title()}:\n{updated_text}\n")
+            #f.write("="*40 + "\n")
         print(f"Updated page: {page.title()}")
     else:
         print(f"No changes made to page: {page.title()}")
